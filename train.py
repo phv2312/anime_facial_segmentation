@@ -15,6 +15,7 @@ from mit_semseg.models import ModelBuilder, SegmentationModule
 from mit_semseg.utils import AverageMeter, parse_devices, setup_logger
 from mit_semseg.lib.nn import UserScatteredDataParallel, user_scattered_collate, patch_replication_callback
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # train one epoch
 def train(segmentation_module, iterator, optimizers, history, epoch, cfg):
@@ -29,13 +30,17 @@ def train(segmentation_module, iterator, optimizers, history, epoch, cfg):
     tic = time.time()
     for i in range(cfg.TRAIN.epoch_iters):
         # load a batch of data
-        batch_data = next(iterator)
+        batch_data = next(iterator)[0]
         data_time.update(time.time() - tic)
         segmentation_module.zero_grad()
 
         # adjust learning rate
         cur_iter = i + (epoch - 1) * cfg.TRAIN.epoch_iters
         adjust_learning_rate(optimizers, cur_iter, cfg)
+
+        torch.device('cuda')
+        for k, v in batch_data.items():
+            batch_data[k] = v.to(device)
 
         # forward pass
         loss, acc = segmentation_module(batch_data)

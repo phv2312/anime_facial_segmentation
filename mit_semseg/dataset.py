@@ -71,7 +71,7 @@ class TrainDataset(BaseDataset):
     def __init__(self, root_dataset, odgt, opt, batch_per_gpu=1, **kwargs):
         super(TrainDataset, self).__init__(odgt, opt, **kwargs)
         self.root_dataset = root_dataset
-        # down sampling rate of segm labe
+        # down sampling rate of segm label
         self.segm_downsampling_rate = opt.segm_downsampling_rate
         self.batch_per_gpu = batch_per_gpu
 
@@ -158,10 +158,42 @@ class TrainDataset(BaseDataset):
             segm_path = os.path.join(self.root_dataset, this_record['fpath_segm'])
 
             img = Image.open(image_path).convert('RGB')
-            segm = Image.open(segm_path)
-            assert(segm.mode == "L")
+            segm = Image.open(segm_path).convert('RGB')
+            # assert(segm.mode == "L")
             assert(img.size[0] == segm.size[0])
             assert(img.size[1] == segm.size[1])
+
+            #TODO-kan: process mut1ny label mask here
+            segm_np = np.array(segm)
+            h, w = segm_np.shape[:2]
+            mutiny_labels = [
+                (0,0,0,'Background/undefined'),
+                (255,0,0,'Lips'),
+                (0,255,0,'Eyes'),
+                (0,0,255,'Nose'),
+                (255,255,0,'Hair'),
+                (0,255,255,'Ears'),
+                (255,0,255,'Eyebrows'),
+                (255,255,255,'Teeth'),
+                (128,128,128,'General face'),
+                (255,192,192,'Facial hair'),
+                (0,128,128,'Specs/sunglasses'),
+                (255, 128, 128, '')]
+
+            segm_single_channel_mask = np.zeros(shape=(h, w), dtype=np.uint8)
+
+            # update eye
+            eye_ys, eye_xs = np.where((segm_np[:,:,0] == 0) & (segm_np[:,:,1] == 255) & (segm_np[:,:,2] == 0))
+            if eye_xs.shape[0] > 0:
+                segm_single_channel_mask[eye_ys, eye_xs] = 1
+
+            # update eyebrow
+            eyebrow_ys, eyebrow_xs = np.where((segm_np[:,:,0] == 255) & (segm_np[:,:,1] == 0) & (segm_np[:,:,2] == 255))
+            if eyebrow_xs.shape[0] > 0:
+                segm_single_channel_mask[eyebrow_ys, eyebrow_xs] = 2
+
+            # from numpy -> Image PIL
+            segm = Image.fromarray(segm_single_channel_mask)
 
             # random_flip
             if np.random.choice([0, 1]):

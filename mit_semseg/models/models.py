@@ -30,7 +30,8 @@ class SegmentationModule(SegmentationModuleBase):
         # training
         if segSize is None:
             if self.deep_sup_scale is not None: # use deep supervision technique
-                (pred, pred_deepsup) = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
+                output = self.encoder(feed_dict['img_data'], return_feature_maps=True)
+                (pred, pred_deepsup) = self.decoder(output)
             else:
                 pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
 
@@ -584,3 +585,4 @@ class UPerNet(nn.Module):
         x = nn.functional.log_softmax(x, dim=1)
 
         return x
+
