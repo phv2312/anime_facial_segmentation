@@ -41,18 +41,23 @@ class SegmentationModule(SegmentationModuleBase):
             # logit: (b, n_cls, h, w)
             # target: (b, n_cls, h, w)
             # refactor the target
-            _, n_cls, h, w  = pred.shape
-            mask_list = []
-            for cls_id in range(n_cls):
-                mask_this_cls = np.zeros(shape=(h,w), dtype=np.float)
-                ys, xs = np.where(feed_dict['seg_label'][0].cpu().numpy() == cls_id)
-                mask_this_cls[ys, xs] = 1.
-                mask_list += [mask_this_cls]
-            new_target = np.stack(mask_list, axis=0) # (n_cls, h, w)
-            new_target = torch.from_numpy(new_target).unsqueeze(0)
-            new_target = new_target.to(pred.device)
-            ### end here
+            n_batch, n_cls, h, w  = pred.shape
 
+            new_target = []
+            for b_id in range(n_batch):
+                mask_list = []
+                for cls_id in range(n_cls):
+                    mask_this_cls = np.zeros(shape=(h,w), dtype=np.float)
+                    ys, xs = np.where(feed_dict['seg_label'][b_id].cpu().numpy() == cls_id)
+                    mask_this_cls[ys, xs] = 1.
+                    mask_list += [mask_this_cls]
+                new_target_single_batch = np.stack(mask_list, axis=0) # (n_cls, h, w)
+                new_target_single_batch = torch.from_numpy(new_target_single_batch)
+                new_target_single_batch = new_target_single_batch.to(pred.device)
+
+                new_target += [new_target_single_batch]
+            new_target = torch.stack(new_target, dim=0)
+            ### end here
 
             # loss = self.crit(pred, feed_dict['seg_label'])
             loss = calc_loss(pred, new_target, {})
