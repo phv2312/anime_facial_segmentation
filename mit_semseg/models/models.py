@@ -1,6 +1,8 @@
+import numpy as np
 import torch
 import torch.nn as nn
 from . import resnet, resnext, mobilenet, hrnet
+from mit_semseg.loss import calc_loss
 from mit_semseg.lib.nn import SynchronizedBatchNorm2d
 BatchNorm2d = SynchronizedBatchNorm2d
 
@@ -29,18 +31,37 @@ class SegmentationModule(SegmentationModuleBase):
     def forward(self, feed_dict, *, segSize=None):
         # training
         if segSize is None:
+            output = self.encoder(feed_dict['img_data'], return_feature_maps=True)
+
             if self.deep_sup_scale is not None: # use deep supervision technique
-                output = self.encoder(feed_dict['img_data'], return_feature_maps=True)
                 (pred, pred_deepsup) = self.decoder(output)
             else:
-                pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
+                pred = self.decoder(output, use_log_softmax=False)
 
-            loss = self.crit(pred, feed_dict['seg_label'])
-            if self.deep_sup_scale is not None:
-                loss_deepsup = self.crit(pred_deepsup, feed_dict['seg_label'])
-                loss = loss + loss_deepsup * self.deep_sup_scale
+            # logit: (b, n_cls, h, w)
+            # target: (b, n_cls, h, w)
+            # refactor the target
+            _, n_cls, h, w  = pred.shape
+            mask_list = []
+            for cls_id in range(n_cls):
+                mask_this_cls = np.zeros(shape=(h,w), dtype=np.float)
+                ys, xs = np.where(feed_dict['seg_label'][0].cpu().numpy() == cls_id)
+                mask_this_cls[ys, xs] = 1.
+                mask_list += [mask_this_cls]
+            new_target = np.stack(mask_list, axis=0) # (n_cls, h, w)
+            new_target = torch.from_numpy(new_target).unsqueeze(0)
+            new_target = new_target.to(pred.device)
+            ### end here
 
-            acc = self.pixel_acc(pred, feed_dict['seg_label'])
+
+            # loss = self.crit(pred, feed_dict['seg_label'])
+            loss = calc_loss(pred, new_target, {})
+
+            # if self.deep_sup_scale is not None:
+            #     loss_deepsup = self.crit(pred_deepsup, feed_dict['seg_label'])
+            #     loss = loss + loss_deepsup * self.deep_sup_scale
+
+            acc = self.pixel_acc(nn.functional.log_softmax(pred, dim=1), feed_dict['seg_label'])
             return loss, acc
         # inference
         else:
@@ -371,7 +392,7 @@ class C1(nn.Module):
         # last conv
         self.conv_last = nn.Conv2d(fc_dim // 4, num_class, 1, 1, 0)
 
-    def forward(self, conv_out, segSize=None):
+    def forward(self, conv_out, segSize=None, use_log_softmax=True):
         conv5 = conv_out[-1]
         x = self.cbr(conv5)
         x = self.conv_last(x)
@@ -381,7 +402,8 @@ class C1(nn.Module):
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
         else:
-            x = nn.functional.log_softmax(x, dim=1)
+            if use_log_softmax:
+                x = nn.functional.log_softmax(x, dim=1)
 
         return x
 
