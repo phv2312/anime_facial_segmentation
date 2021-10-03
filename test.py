@@ -3,6 +3,7 @@ import os
 import argparse
 from distutils.version import LooseVersion
 # Numerical libs
+import cv2
 import numpy as np
 import torch
 import torch.nn as nn
@@ -17,45 +18,35 @@ from mit_semseg.lib.utils import as_numpy
 from PIL import Image
 from tqdm import tqdm
 from mit_semseg.config import cfg
-
-colors = loadmat('data/color150.mat')['colors']
-names = {}
-with open('data/object150_info.csv') as f:
-    reader = csv.reader(f)
-    next(reader)
-    for row in reader:
-        names[int(row[0])] = row[5].split(";")[0]
+import matplotlib.pyplot as plt
+def imshow(im):
+    plt.imshow(im)
+    plt.show()
 
 
-def visualize_result(data, pred, cfg):
-    (img, info) = data
+def visualize_pred_mask(image, mask_dict, threshold):
+    h, w = image.shape[:2]
 
-    # print predictions in descending order
-    pred = np.int32(pred)
-    pixs = pred.size
-    uniques, counts = np.unique(pred, return_counts=True)
-    print("Predictions in [{}]:".format(info))
-    for idx in np.argsort(counts)[::-1]:
-        name = names[uniques[idx] + 1]
-        ratio = counts[idx] / pixs * 100
-        if ratio > 0.1:
-            print("  {}: {:.2f}%".format(name, ratio))
+    cls2colors = {
+        0: (255,0,0), #eye
+        1: (0,255,0)  #eyebrow
+    }
+    mask_rgb = np.ones(shape=(h,w,3), dtype=np.uint8) * 255
+    for cls_id, mask_cls in mask_dict.items():
+        color = cls2colors[cls_id]
+        mask_rgb[mask_cls > threshold] = color
 
-    # colorize prediction
-    pred_color = colorEncode(pred, colors).astype(np.uint8)
+    visualize_image = 0.5 * image.astype(np.float) + 0.5 * mask_rgb.astype(np.float)
+    visualize_image = np.clip(visualize_image.astype(np.uint8), 0, 255)
 
-    # aggregate images and save
-    im_vis = np.concatenate((img, pred_color), axis=1)
-
-    img_name = info.split('/')[-1]
-    Image.fromarray(im_vis).save(
-        os.path.join(cfg.TEST.result, img_name.replace('.jpg', '.png')))
+    return visualize_image
 
 
 def test(segmentation_module, loader, gpu):
     segmentation_module.eval()
 
     pbar = tqdm(total=len(loader))
+    result = []
     for batch_data in loader:
         # process data
         batch_data = batch_data[0]
@@ -67,6 +58,7 @@ def test(segmentation_module, loader, gpu):
             scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
             scores = async_copy_to(scores, gpu)
 
+            # multiple scale inference
             for img in img_resized_list:
                 feed_dict = batch_data.copy()
                 feed_dict['img_data'] = img
@@ -78,17 +70,18 @@ def test(segmentation_module, loader, gpu):
                 pred_tmp = segmentation_module(feed_dict, segSize=segSize)
                 scores = scores + pred_tmp / len(cfg.DATASET.imgSizes)
 
-            _, pred = torch.max(scores, dim=1)
-            pred = as_numpy(pred.squeeze(0).cpu())
+            #
+            mask_cls_dict = {}
+            _, n_cls, _, _ = scores.shape
+            for cls_id in range(n_cls):
+                mask_cls = scores[0][cls_id].cpu().numpy()
+                mask_cls_dict[cls_id] =  mask_cls
 
-        # visualization
-        visualize_result(
-            (batch_data['img_ori'], batch_data['info']),
-            pred,
-            cfg
-        )
+        result += [mask_cls_dict]
 
         pbar.update(1)
+    return result
+
 
 
 def main(cfg, gpu):
@@ -116,7 +109,7 @@ def main(cfg, gpu):
         cfg.DATASET)
     loader_test = torch.utils.data.DataLoader(
         dataset_test,
-        batch_size=cfg.TEST.batch_size,
+        batch_size=1,
         shuffle=False,
         collate_fn=user_scattered_collate,
         num_workers=5,
@@ -125,7 +118,19 @@ def main(cfg, gpu):
     segmentation_module.cuda()
 
     # Main loop
-    test(segmentation_module, loader_test, gpu)
+    result = test(segmentation_module, loader_test, gpu)
+
+    # visualize
+    for batch_id, batch_result in enumerate(result):
+        original_image_path = cfg.list_test[batch_id]['fpath_img']
+        original_image = cv2.imread(original_image_path)
+
+        for cls_id, mask_cls in batch_result.items():
+            print ('cls_id:', cls_id)
+            imshow(mask_cls)
+
+        visualize_image = visualize_pred_mask(original_image, batch_result, threshold=0.8)
+        imshow(visualize_image)
 
     print('Inference done!')
 
@@ -145,7 +150,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--cfg",
-        default="config/ade20k-resnet50dilated-ppm_deepsup.yaml",
+        default="config/mut1ny-mobilenet.yaml",
         metavar="FILE",
         help="path to config file",
         type=str,
@@ -189,6 +194,7 @@ if __name__ == '__main__':
         imgs = find_recursive(args.imgs)
     else:
         imgs = [args.imgs]
+
     assert len(imgs), "imgs should be a path to image (.jpg) or directory."
     cfg.list_test = [{'fpath_img': x} for x in imgs]
 

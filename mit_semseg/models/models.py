@@ -30,9 +30,8 @@ class SegmentationModule(SegmentationModuleBase):
 
     def forward(self, feed_dict, *, segSize=None):
         # training
+        output = self.encoder(feed_dict['img_data'], return_feature_maps=True)
         if segSize is None:
-            output = self.encoder(feed_dict['img_data'], return_feature_maps=True)
-
             if self.deep_sup_scale is not None: # use deep supervision technique
                 (pred, pred_deepsup) = self.decoder(output)
             else:
@@ -70,7 +69,8 @@ class SegmentationModule(SegmentationModuleBase):
             return loss, acc
         # inference
         else:
-            pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True), segSize=segSize)
+            pred = self.decoder(output, segSize=segSize, use_log_softmax=False)
+            pred = torch.sigmoid(pred)
             return pred
 
 
@@ -405,7 +405,9 @@ class C1(nn.Module):
         if self.use_softmax: # is True during inference
             x = nn.functional.interpolate(
                 x, size=segSize, mode='bilinear', align_corners=False)
-            x = nn.functional.softmax(x, dim=1)
+
+            if use_log_softmax:
+                x = nn.functional.softmax(x, dim=1)
         else:
             if use_log_softmax:
                 x = nn.functional.log_softmax(x, dim=1)
@@ -568,7 +570,7 @@ class UPerNet(nn.Module):
             nn.Conv2d(fpn_dim, num_class, kernel_size=1)
         )
 
-    def forward(self, conv_out, segSize=None):
+    def forward(self, conv_out, segSize=None, use_log_softmax=True):
         conv5 = conv_out[-1]
 
         input_size = conv5.size()
@@ -606,10 +608,13 @@ class UPerNet(nn.Module):
         if self.use_softmax:  # is True during inference
             x = nn.functional.interpolate(
                 x, size=segSize, mode='bilinear', align_corners=False)
-            x = nn.functional.softmax(x, dim=1)
+
+            if use_log_softmax:
+                x = nn.functional.softmax(x, dim=1)
             return x
 
-        x = nn.functional.log_softmax(x, dim=1)
+        if use_log_softmax:
+            x = nn.functional.log_softmax(x, dim=1)
 
         return x
 
