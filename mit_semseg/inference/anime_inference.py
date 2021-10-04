@@ -104,15 +104,15 @@ class AnimeInference:
         return [mask_cls_dict]
 
 def single_test():
-    encoder_path = r"C:\Users\Cinnamon\Desktop\geek_resnet50_upernet\encoder_epoch_5.pth"
-    decoder_path = r"C:\Users\Cinnamon\Desktop\geek_resnet50_upernet\decoder_epoch_5.pth"
-    config_path  = r"C:\Users\Cinnamon\Desktop\geek_resnet50_upernet\config.yaml"
+    encoder_path = r"C:\Users\Cinnamon\Desktop\resnet50_upernet\encoder_epoch_5.pth"
+    decoder_path = r"C:\Users\Cinnamon\Desktop\resnet50_upernet\decoder_epoch_5.pth"
+    config_path  = r"C:\Users\Cinnamon\Desktop\resnet50_upernet\config.yaml"
 
     # model initialization
     model = AnimeInference(encoder_path, decoder_path, config_path)
 
-    image_paths = [r"C:\Users\Cinnamon\Desktop\samples\crop\9_crop.png"]
-    image_paths = glob.glob(os.path.join(r"C:\Users\Cinnamon\Desktop\samples\crop", '*.png'))
+    image_paths = [r"./../../samples/sample.png"]
+    # image_paths = glob.glob(os.path.join(r"C:\Users\Cinnamon\Desktop\samples\crop", '*.png'))
 
     n_paths = len(image_paths)
     for i, image_path in enumerate(image_paths):
@@ -127,10 +127,11 @@ def single_test():
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         mask_cls_dict = results[0]
         visualize_image = visualize_pred_mask(image, mask_cls_dict, threshold=0.3)
+        imshow(visualize_image)
 
-        #
-        output_path = os.path.join(os.path.dirname(image_path), 'segm', os.path.basename(image_path))
-        cv2.imwrite(output_path, visualize_image)
+        # #
+        # output_path = os.path.join(os.path.dirname(image_path), 'segm', os.path.basename(image_path))
+        # cv2.imwrite(output_path, visualize_image)
 
 
 if __name__ == '__main__':
