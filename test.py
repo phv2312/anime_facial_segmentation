@@ -19,6 +19,7 @@ from PIL import Image
 from tqdm import tqdm
 from mit_semseg.config import cfg
 import matplotlib.pyplot as plt
+
 def imshow(im):
     plt.imshow(im)
     plt.show()
@@ -129,7 +130,7 @@ def main(cfg, gpu):
             print ('cls_id:', cls_id)
             imshow(mask_cls)
 
-        visualize_image = visualize_pred_mask(original_image, batch_result, threshold=0.8)
+        visualize_image = visualize_pred_mask(original_image, batch_result, threshold=0.35)
         imshow(visualize_image)
 
     print('Inference done!')
@@ -150,7 +151,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--cfg",
-        default="config/mut1ny-mobilenet.yaml",
+        default=r"C:\Users\Cinnamon\Desktop\geek_resnet50_upernet\config.yaml",
         metavar="FILE",
         help="path to config file",
         type=str,
