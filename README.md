@@ -32,6 +32,6 @@ imshow(visualize)
 ```
 
 ## Samples
-<img src="samples/sample.png" width="900"/>
-<img src="samples/expected_output.png" width="900"/>
-[From left to right: Test Image, Predicted Result]
+<img src="samples/sample.png" width="300"/>
+<img src="samples/exptected_output.png" width="300"/>
+[Test Image and its Predicted Result]
