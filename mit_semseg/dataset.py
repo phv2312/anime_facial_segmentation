@@ -192,6 +192,11 @@ class TrainDataset(BaseDataset):
             if eyebrow_xs.shape[0] > 0:
                 segm_single_channel_mask[eyebrow_ys, eyebrow_xs] = 2
 
+            # update mouth
+            mouth_ys, mouth_xs = np.where((segm_np[:,:,0] == 0) & (segm_np[:,:,1] == 0) & (segm_np[:,:,2] == 255))
+            if mouth_xs.shape[0] > 0:
+                segm_single_channel_mask[mouth_ys, mouth_xs] = 3
+
             # from numpy -> Image PIL
             segm = Image.fromarray(segm_single_channel_mask)
 
