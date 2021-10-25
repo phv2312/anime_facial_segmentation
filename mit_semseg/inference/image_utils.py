@@ -45,7 +45,8 @@ def visualize_pred_mask(image, mask_dict, threshold):
 
     cls2colors = {
         0: (255,0,0), #eye
-        1: (0,255,0)  #eyebrow
+        1: (0,255,0),  #eyebrow
+        2: (0,0,255)
     }
     mask_rgb = np.ones(shape=(h,w,3), dtype=np.uint8) * 255
     for cls_id, mask_cls in mask_dict.items():
